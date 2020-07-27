@@ -95,7 +95,7 @@ async function balances () {
 }
 
 async function startWithdraw() {
-  await matic.startWithdrawMintalbeERC20(tokenAddress, amount, {
+  await matic.startWithdrawMintableERC20(tokenAddress, amount, {
     from: user1
   })
   .then(async (r) => {
