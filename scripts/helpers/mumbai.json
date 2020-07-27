@@ -38,7 +38,7 @@
       "Predicates":{
         "ERC20Predicate": "0x033a0A06dc6e78a518003C81B64f9CA80A55cb06",
         "ERC721Predicate": "0xDbBffd69Ef9F34bA8Fb8722157A51a4733992B35",
-        "MintableERC20Predicate": "0x4F4fAC50E94f596015aaD3b15a5fA5b2255d4266"
+        "MintableERC20Predicate": "0x54C39834035d32Fe785557E2c26016F1fFb4C3d4"
       },
       "Tokens": {
         "MaticToken": "0x499d11E0b6eAC7c0593d8Fb292DCBbF815Fb29Ae",
