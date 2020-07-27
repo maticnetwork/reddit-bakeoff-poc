@@ -1,0 +1,26 @@
+{
+  "name": "reddit-contracts",
+  "version": "1.0.0",
+  "description": "for mumbai ```bash $ export NETWORK=mumbai && node scripts/test ```",
+  "main": "networks.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nglglhtr/reddit-contracts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nglglhtr/reddit-contracts/issues"
+  },
+  "homepage": "https://github.com/nglglhtr/reddit-contracts#readme",
+  "dependencies": {
+    "@truffle/hdwallet-provider": "^1.0.40",
+    "config": "^3.3.1",
+    "ethereumjs-util": "^7.0.3",
+    "matic": "github:rahuldamodar94/matic.js#eea80b44cb065027365fefd7237f6d8f31006903"
+  }
+}
