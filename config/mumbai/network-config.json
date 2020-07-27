@@ -1,0 +1,11 @@
+{
+    "eth_rpc_url" : "https://goerli.infura.io/v3/<INFURA_KEY>",
+    "bor_rpc_url" : "https://rpc-mumbai.matic.today",
+    "heimdallBaseUrl": "https://heimdall.api.matic.today",
+
+    "heimdall-chain-id" : "heimdall-80001",
+    "bor-chain-id" : "80001",
+    "tendermint_rpc_url":"https://heimdall.api.matic.today",
+    "spanInterval": 5,
+    "update-signer-update-limit": "1"
+}

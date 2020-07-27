@@ -1,0 +1,10 @@
+{
+    "initialSupply": 10000,
+    "initialKarma": 10000,
+    "subscriptionPrice": 10,
+    "duration": 604800,
+    "renewBefore": 518400,
+    "subredditName": "Matic", 
+    "subredditTokenSymbol": "RM",
+    "subredditTokenName": "RMatic"
+}
