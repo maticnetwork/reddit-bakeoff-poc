@@ -56,5 +56,5 @@
 
 Note... Change timeout flag incase of more time required.
 
-Logs... You can find the logs in respective txt files.(claims.txt, transfer.txt,subscribe.txt )
+Logs... You can find the logs in respective txt files.(claims.txt, transfer.txt,subscribe.txt)
 ```
