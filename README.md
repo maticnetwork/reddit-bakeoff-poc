@@ -8,6 +8,15 @@
 
 ### Setup
 
+Install dependencies
+```bash
+$ npm i
+```
+
+1. Create secrets.json in the root directory according to the format given in secrets.json.template </br>
+2. Insert the privatekey of the reddit contracts in the owner key of secrets.json
+3. In the config/default.json mention the goerli rpc endpoint 
+
 for Mumbai test network
 ```bash
 $ export NETWORK=mumbai && node scripts/<test-file>
