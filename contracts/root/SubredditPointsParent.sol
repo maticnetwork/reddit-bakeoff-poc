@@ -1,10 +1,10 @@
 pragma solidity >=0.5.0 <0.6.0;
 
 import "./ISubredditPointsParent.sol";
-import "./contracts-package/Initializable.sol";
-import "./contracts-package/Ownable.sol";
-import "./contracts-package/ERC20.sol";
-import "./libraries/Address.sol";
+import "../contracts-package/Initializable.sol";
+import "../contracts-package/Ownable.sol";
+import "../contracts-package/ERC20.sol";
+import "../libraries/Address.sol";
 
 // ERC20 and borrows only operators notion from ERC777, accounts can revoke default operator
 contract SubredditPointsParent is
