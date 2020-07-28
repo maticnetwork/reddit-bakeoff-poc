@@ -13,9 +13,6 @@
       "subredditName": "Matic", 
       "subredditTokenSymbol": "RM",
       "subredditTokenName": "RMatic"
-    },
-    "privateKeys": {
-      "owner": ""
     }
   }, 
   "mumbai": {
@@ -36,9 +33,6 @@
       "subredditName": "mREDDIT", 
       "subredditTokenSymbol": "MR",
       "subredditTokenName": "mREDDIT"
-    },
-    "privateKeys": {
-      "owner": ""
     }
   }
 }

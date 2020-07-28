@@ -9,7 +9,7 @@ const userPvtKey = info.userPvtKey
 const user = info.user
 const hash = info.burnTx
 
-const { web3, owner, token, subscriptions, distributions, wait, wallet, newAccount, claimSig, karmaSource, params } = require('./helpers/utils')
+const { web3, owner, wait } = require('./helpers/utils')
 
 
 const config = require('config')

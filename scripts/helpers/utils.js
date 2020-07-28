@@ -15,7 +15,7 @@ const params = {
   subredditTokenName
 } = config.get(mode + '.params')
 
-const privateKeys = config.get(mode + '.privateKeys')
+const { privateKeys } = require('../../secrets.json')
 
 const Web3 = require('web3')
 const web3 = new Web3 (network.rpc)
