@@ -1,0 +1,20 @@
+{
+  "network": {
+    "mumbai":"https://rpc-mumbai.matic.today"
+  },
+  "params": {
+    "initialSupply": "10000",
+    "initialKarma": "10000",
+    "subscriptionPrice": "10",
+    "duration": "604800",
+    "renewBefore": "518400",
+    "subredditName": "mREDDIT", 
+    "subredditTokenSymbol": "MR",
+    "subredditTokenName": "mREDDIT"
+  },
+  "addresses": {
+    "Subscriptions": "0x46C78e978e6C9415237684dd5bA29d9d82959Fe1",
+    "Distributions": "0x7f77947be6Cc1F955C8704fC90f009D65b91D874",
+    "SubredditPoints": "0x7F4DeA17Cc1a3B65f10E72897b95948F1F1f5A29"
+  }
+}

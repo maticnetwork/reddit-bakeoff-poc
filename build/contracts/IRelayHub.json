@@ -1,0 +1,3689 @@
+{
+  "fileName": "IRelayHub.sol",
+  "contractName": "IRelayHub",
+  "source": "// File: @openzeppelin/contracts-ethereum-package/contracts/GSN/IRelayHub.sol\n\npragma solidity ^0.5.0;\n\n/**\n * @dev Interface for `RelayHub`, the core contract of the GSN. Users should not need to interact with this contract\n * directly.\n *\n * See the https://github.com/OpenZeppelin/openzeppelin-gsn-helpers[OpenZeppelin GSN helpers] for more information on\n * how to deploy an instance of `RelayHub` on your local test network.\n */\ncontract IRelayHub {\n    // Relay management\n\n    /**\n     * @dev Adds stake to a relay and sets its `unstakeDelay`. If the relay does not exist, it is created, and the caller\n     * of this function becomes its owner. If the relay already exists, only the owner can call this function. A relay\n     * cannot be its own owner.\n     *\n     * All Ether in this function call will be added to the relay's stake.\n     * Its unstake delay will be assigned to `unstakeDelay`, but the new value must be greater or equal to the current one.\n     *\n     * Emits a {Staked} event.\n     */\n    function stake(address relayaddr, uint256 unstakeDelay) external payable;\n\n    /**\n     * @dev Emitted when a relay's stake or unstakeDelay are increased\n     */\n    event Staked(address indexed relay, uint256 stake, uint256 unstakeDelay);\n\n    /**\n     * @dev Registers the caller as a relay.\n     * The relay must be staked for, and not be a contract (i.e. this function must be called directly from an EOA).\n     *\n     * This function can be called multiple times, emitting new {RelayAdded} events. Note that the received\n     * `transactionFee` is not enforced by {relayCall}.\n     *\n     * Emits a {RelayAdded} event.\n     */\n    function registerRelay(uint256 transactionFee, string memory url) public;\n\n    /**\n     * @dev Emitted when a relay is registered or re-registerd. Looking at these events (and filtering out\n     * {RelayRemoved} events) lets a client discover the list of available relays.\n     */\n    event RelayAdded(\n        address indexed relay,\n        address indexed owner,\n        uint256 transactionFee,\n        uint256 stake,\n        uint256 unstakeDelay,\n        string url\n    );\n\n    /**\n     * @dev Removes (deregisters) a relay. Unregistered (but staked for) relays can also be removed.\n     *\n     * Can only be called by the owner of the relay. After the relay's `unstakeDelay` has elapsed, {unstake} will be\n     * callable.\n     *\n     * Emits a {RelayRemoved} event.\n     */\n    function removeRelayByOwner(address relay) public;\n\n    /**\n     * @dev Emitted when a relay is removed (deregistered). `unstakeTime` is the time when unstake will be callable.\n     */\n    event RelayRemoved(address indexed relay, uint256 unstakeTime);\n\n    /** Deletes the relay from the system, and gives back its stake to the owner.\n     *\n     * Can only be called by the relay owner, after `unstakeDelay` has elapsed since {removeRelayByOwner} was called.\n     *\n     * Emits an {Unstaked} event.\n     */\n    function unstake(address relay) public;\n\n    /**\n     * @dev Emitted when a relay is unstaked for, including the returned stake.\n     */\n    event Unstaked(address indexed relay, uint256 stake);\n\n    // States a relay can be in\n    enum RelayState {\n        Unknown, // The relay is unknown to the system: it has never been staked for\n        Staked, // The relay has been staked for, but it is not yet active\n        Registered, // The relay has registered itself, and is active (can relay calls)\n        Removed // The relay has been removed by its owner and can no longer relay calls. It must wait for its unstakeDelay to elapse before it can unstake\n    }\n\n    /**\n     * @dev Returns a relay's status. Note that relays can be deleted when unstaked or penalized, causing this function\n     * to return an empty entry.\n     */\n    function getRelay(address relay)\n        external\n        view\n        returns (\n            uint256 totalStake,\n            uint256 unstakeDelay,\n            uint256 unstakeTime,\n            address payable owner,\n            RelayState state\n        );\n\n    // Balance management\n\n    /**\n     * @dev Deposits Ether for a contract, so that it can receive (and pay for) relayed transactions.\n     *\n     * Unused balance can only be withdrawn by the contract itself, by calling {withdraw}.\n     *\n     * Emits a {Deposited} event.\n     */\n    function depositFor(address target) public payable;\n\n    /**\n     * @dev Emitted when {depositFor} is called, including the amount and account that was funded.\n     */\n    event Deposited(\n        address indexed recipient,\n        address indexed from,\n        uint256 amount\n    );\n\n    /**\n     * @dev Returns an account's deposits. These can be either a contracts's funds, or a relay owner's revenue.\n     */\n    function balanceOf(address target) external view returns (uint256);\n\n    /**\n     * Withdraws from an account's balance, sending it back to it. Relay owners call this to retrieve their revenue, and\n     * contracts can use it to reduce their funding.\n     *\n     * Emits a {Withdrawn} event.\n     */\n    function withdraw(uint256 amount, address payable dest) public;\n\n    /**\n     * @dev Emitted when an account withdraws funds from `RelayHub`.\n     */\n    event Withdrawn(\n        address indexed account,\n        address indexed dest,\n        uint256 amount\n    );\n\n    // Relaying\n\n    /**\n     * @dev Checks if the `RelayHub` will accept a relayed operation.\n     * Multiple things must be true for this to happen:\n     *  - all arguments must be signed for by the sender (`from`)\n     *  - the sender's nonce must be the current one\n     *  - the recipient must accept this transaction (via {acceptRelayedCall})\n     *\n     * Returns a `PreconditionCheck` value (`OK` when the transaction can be relayed), or a recipient-specific error\n     * code if it returns one in {acceptRelayedCall}.\n     */\n    function canRelay(\n        address relay,\n        address from,\n        address to,\n        bytes memory encodedFunction,\n        uint256 transactionFee,\n        uint256 gasPrice,\n        uint256 gasLimit,\n        uint256 nonce,\n        bytes memory signature,\n        bytes memory approvalData\n    ) public view returns (uint256 status, bytes memory recipientContext);\n\n    // Preconditions for relaying, checked by canRelay and returned as the corresponding numeric values.\n    enum PreconditionCheck {\n        OK, // All checks passed, the call can be relayed\n        WrongSignature, // The transaction to relay is not signed by requested sender\n        WrongNonce, // The provided nonce has already been used by the sender\n        AcceptRelayedCallReverted, // The recipient rejected this call via acceptRelayedCall\n        InvalidRecipientStatusCode // The recipient returned an invalid (reserved) status code\n    }\n\n    /**\n     * @dev Relays a transaction.\n     *\n     * For this to succeed, multiple conditions must be met:\n     *  - {canRelay} must `return PreconditionCheck.OK`\n     *  - the sender must be a registered relay\n     *  - the transaction's gas price must be larger or equal to the one that was requested by the sender\n     *  - the transaction must have enough gas to not run out of gas if all internal transactions (calls to the\n     * recipient) use all gas available to them\n     *  - the recipient must have enough balance to pay the relay for the worst-case scenario (i.e. when all gas is\n     * spent)\n     *\n     * If all conditions are met, the call will be relayed and the recipient charged. {preRelayedCall}, the encoded\n     * function and {postRelayedCall} will be called in that order.\n     *\n     * Parameters:\n     *  - `from`: the client originating the request\n     *  - `to`: the target {IRelayRecipient} contract\n     *  - `encodedFunction`: the function call to relay, including data\n     *  - `transactionFee`: fee (%) the relay takes over actual gas cost\n     *  - `gasPrice`: gas price the client is willing to pay\n     *  - `gasLimit`: gas to forward when calling the encoded function\n     *  - `nonce`: client's nonce\n     *  - `signature`: client's signature over all previous params, plus the relay and RelayHub addresses\n     *  - `approvalData`: dapp-specific data forwared to {acceptRelayedCall}. This value is *not* verified by the\n     * `RelayHub`, but it still can be used for e.g. a signature.\n     *\n     * Emits a {TransactionRelayed} event.\n     */\n    function relayCall(\n        address from,\n        address to,\n        bytes memory encodedFunction,\n        uint256 transactionFee,\n        uint256 gasPrice,\n        uint256 gasLimit,\n        uint256 nonce,\n        bytes memory signature,\n        bytes memory approvalData\n    ) public;\n\n    /**\n     * @dev Emitted when an attempt to relay a call failed.\n     *\n     * This can happen due to incorrect {relayCall} arguments, or the recipient not accepting the relayed call. The\n     * actual relayed call was not executed, and the recipient not charged.\n     *\n     * The `reason` parameter contains an error code: values 1-10 correspond to `PreconditionCheck` entries, and values\n     * over 10 are custom recipient error codes returned from {acceptRelayedCall}.\n     */\n    event CanRelayFailed(\n        address indexed relay,\n        address indexed from,\n        address indexed to,\n        bytes4 selector,\n        uint256 reason\n    );\n\n    /**\n     * @dev Emitted when a transaction is relayed.\n     * Useful when monitoring a relay's operation and relayed calls to a contract\n     *\n     * Note that the actual encoded function might be reverted: this is indicated in the `status` parameter.\n     *\n     * `charge` is the Ether value deducted from the recipient's balance, paid to the relay's owner.\n     */\n    event TransactionRelayed(\n        address indexed relay,\n        address indexed from,\n        address indexed to,\n        bytes4 selector,\n        RelayCallStatus status,\n        uint256 charge\n    );\n\n    // Reason error codes for the TransactionRelayed event\n    enum RelayCallStatus {\n        OK, // The transaction was successfully relayed and execution successful - never included in the event\n        RelayedCallFailed, // The transaction was relayed, but the relayed call failed\n        PreRelayedFailed, // The transaction was not relayed due to preRelatedCall reverting\n        PostRelayedFailed, // The transaction was relayed and reverted due to postRelatedCall reverting\n        RecipientBalanceChanged // The transaction was relayed and reverted due to the recipient's balance changing\n    }\n\n    /**\n     * @dev Returns how much gas should be forwarded to a call to {relayCall}, in order to relay a transaction that will\n     * spend up to `relayedCallStipend` gas.\n     */\n    function requiredGas(uint256 relayedCallStipend)\n        public\n        view\n        returns (uint256);\n\n    /**\n     * @dev Returns the maximum recipient charge, given the amount of gas forwarded, gas price and relay fee.\n     */\n    function maxPossibleCharge(\n        uint256 relayedCallStipend,\n        uint256 gasPrice,\n        uint256 transactionFee\n    ) public view returns (uint256);\n\n    // Relay penalization.\n    // Any account can penalize relays, removing them from the system immediately, and rewarding the\n    // reporter with half of the relay's stake. The other half is burned so that, even if the relay penalizes itself, it\n    // still loses half of its stake.\n\n    /**\n     * @dev Penalize a relay that signed two transactions using the same nonce (making only the first one valid) and\n     * different data (gas price, gas limit, etc. may be different).\n     *\n     * The (unsigned) transaction data and signature for both transactions must be provided.\n     */\n    function penalizeRepeatedNonce(\n        bytes memory unsignedTx1,\n        bytes memory signature1,\n        bytes memory unsignedTx2,\n        bytes memory signature2\n    ) public;\n\n    /**\n     * @dev Penalize a relay that sent a transaction that didn't target `RelayHub`'s {registerRelay} or {relayCall}.\n     */\n    function penalizeIllegalTransaction(\n        bytes memory unsignedTx,\n        bytes memory signature\n    ) public;\n\n    /**\n     * @dev Emitted when a relay is penalized.\n     */\n    event Penalized(address indexed relay, address sender, uint256 amount);\n\n    /**\n     * @dev Returns an account's nonce in `RelayHub`.\n     */\n    function getNonce(address from) external view returns (uint256);\n}",
+  "sourcePath": "contracts/GSN/IRelayHub.sol",
+  "sourceMap": "",
+  "deployedSourceMap": "",
+  "abi": [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes4",
+          "name": "selector",
+          "type": "bytes4"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "reason",
+          "type": "uint256"
+        }
+      ],
+      "name": "CanRelayFailed",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "Deposited",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "sender",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "Penalized",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "transactionFee",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "stake",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "unstakeDelay",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "url",
+          "type": "string"
+        }
+      ],
+      "name": "RelayAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "unstakeTime",
+          "type": "uint256"
+        }
+      ],
+      "name": "RelayRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "stake",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "unstakeDelay",
+          "type": "uint256"
+        }
+      ],
+      "name": "Staked",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes4",
+          "name": "selector",
+          "type": "bytes4"
+        },
+        {
+          "indexed": false,
+          "internalType": "enum IRelayHub.RelayCallStatus",
+          "name": "status",
+          "type": "uint8"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "charge",
+          "type": "uint256"
+        }
+      ],
+      "name": "TransactionRelayed",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "stake",
+          "type": "uint256"
+        }
+      ],
+      "name": "Unstaked",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "dest",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "Withdrawn",
+      "type": "event"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "target",
+          "type": "address"
+        }
+      ],
+      "name": "balanceOf",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "encodedFunction",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint256",
+          "name": "transactionFee",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "gasPrice",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "gasLimit",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "nonce",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "signature",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "approvalData",
+          "type": "bytes"
+        }
+      ],
+      "name": "canRelay",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "status",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "recipientContext",
+          "type": "bytes"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "target",
+          "type": "address"
+        }
+      ],
+      "name": "depositFor",
+      "outputs": [],
+      "payable": true,
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        }
+      ],
+      "name": "getNonce",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        }
+      ],
+      "name": "getRelay",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "totalStake",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "unstakeDelay",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "unstakeTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address payable",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "internalType": "enum IRelayHub.RelayState",
+          "name": "state",
+          "type": "uint8"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "relayedCallStipend",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "gasPrice",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "transactionFee",
+          "type": "uint256"
+        }
+      ],
+      "name": "maxPossibleCharge",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "bytes",
+          "name": "unsignedTx",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "signature",
+          "type": "bytes"
+        }
+      ],
+      "name": "penalizeIllegalTransaction",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "bytes",
+          "name": "unsignedTx1",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "signature1",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "unsignedTx2",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "signature2",
+          "type": "bytes"
+        }
+      ],
+      "name": "penalizeRepeatedNonce",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "transactionFee",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "url",
+          "type": "string"
+        }
+      ],
+      "name": "registerRelay",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "encodedFunction",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint256",
+          "name": "transactionFee",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "gasPrice",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "gasLimit",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "nonce",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bytes",
+          "name": "signature",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "approvalData",
+          "type": "bytes"
+        }
+      ],
+      "name": "relayCall",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        }
+      ],
+      "name": "removeRelayByOwner",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "relayedCallStipend",
+          "type": "uint256"
+        }
+      ],
+      "name": "requiredGas",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "relayaddr",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "unstakeDelay",
+          "type": "uint256"
+        }
+      ],
+      "name": "stake",
+      "outputs": [],
+      "payable": true,
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "relay",
+          "type": "address"
+        }
+      ],
+      "name": "unstake",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address payable",
+          "name": "dest",
+          "type": "address"
+        }
+      ],
+      "name": "withdraw",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "ast": {
+    "absolutePath": "contracts/GSN/IRelayHub.sol",
+    "exportedSymbols": {
+      "IRelayHub": [
+        918
+      ]
+    },
+    "id": 919,
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 667,
+        "literals": [
+          "solidity",
+          "^",
+          "0.5",
+          ".0"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "79:23:2"
+      },
+      {
+        "baseContracts": [],
+        "contractDependencies": [],
+        "contractKind": "contract",
+        "documentation": "@dev Interface for `RelayHub`, the core contract of the GSN. Users should not need to interact with this contract\ndirectly.\n * See the https://github.com/OpenZeppelin/openzeppelin-gsn-helpers[OpenZeppelin GSN helpers] for more information on\nhow to deploy an instance of `RelayHub` on your local test network.",
+        "fullyImplemented": false,
+        "id": 918,
+        "linearizedBaseContracts": [
+          918
+        ],
+        "name": "IRelayHub",
+        "nodeType": "ContractDefinition",
+        "nodes": [
+          {
+            "body": null,
+            "documentation": "@dev Adds stake to a relay and sets its `unstakeDelay`. If the relay does not exist, it is created, and the caller\nof this function becomes its owner. If the relay already exists, only the owner can call this function. A relay\ncannot be its own owner.\n     * All Ether in this function call will be added to the relay's stake.\nIts unstake delay will be assigned to `unstakeDelay`, but the new value must be greater or equal to the current one.\n     * Emits a {Staked} event.",
+            "id": 674,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "stake",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 672,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 669,
+                  "name": "relayaddr",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 674,
+                  "src": "1032:17:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 668,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1032:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 671,
+                  "name": "unstakeDelay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 674,
+                  "src": "1051:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 670,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1051:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1031:41:2"
+            },
+            "returnParameters": {
+              "id": 673,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "1089:0:2"
+            },
+            "scope": 918,
+            "src": "1017:73:2",
+            "stateMutability": "payable",
+            "superFunction": null,
+            "visibility": "external"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when a relay's stake or unstakeDelay are increased",
+            "id": 682,
+            "name": "Staked",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 681,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 676,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 682,
+                  "src": "1196:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 675,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1196:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 678,
+                  "indexed": false,
+                  "name": "stake",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 682,
+                  "src": "1219:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 677,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1219:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 680,
+                  "indexed": false,
+                  "name": "unstakeDelay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 682,
+                  "src": "1234:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 679,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1234:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1195:60:2"
+            },
+            "src": "1183:73:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Registers the caller as a relay.\nThe relay must be staked for, and not be a contract (i.e. this function must be called directly from an EOA).\n     * This function can be called multiple times, emitting new {RelayAdded} events. Note that the received\n`transactionFee` is not enforced by {relayCall}.\n     * Emits a {RelayAdded} event.",
+            "id": 689,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "registerRelay",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 687,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 684,
+                  "name": "transactionFee",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 689,
+                  "src": "1676:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 683,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1676:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 686,
+                  "name": "url",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 689,
+                  "src": "1700:17:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_string_memory_ptr",
+                    "typeString": "string"
+                  },
+                  "typeName": {
+                    "id": 685,
+                    "name": "string",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1700:6:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_string_storage_ptr",
+                      "typeString": "string"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1675:43:2"
+            },
+            "returnParameters": {
+              "id": 688,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "1725:0:2"
+            },
+            "scope": 918,
+            "src": "1653:73:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when a relay is registered or re-registerd. Looking at these events (and filtering out\n{RelayRemoved} events) lets a client discover the list of available relays.",
+            "id": 703,
+            "name": "RelayAdded",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 702,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 691,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 703,
+                  "src": "1964:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 690,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1964:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 693,
+                  "indexed": true,
+                  "name": "owner",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 703,
+                  "src": "1995:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 692,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "1995:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 695,
+                  "indexed": false,
+                  "name": "transactionFee",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 703,
+                  "src": "2026:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 694,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2026:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 697,
+                  "indexed": false,
+                  "name": "stake",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 703,
+                  "src": "2058:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 696,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2058:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 699,
+                  "indexed": false,
+                  "name": "unstakeDelay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 703,
+                  "src": "2081:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 698,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2081:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 701,
+                  "indexed": false,
+                  "name": "url",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 703,
+                  "src": "2111:10:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_string_memory_ptr",
+                    "typeString": "string"
+                  },
+                  "typeName": {
+                    "id": 700,
+                    "name": "string",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2111:6:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_string_storage_ptr",
+                      "typeString": "string"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "1954:173:2"
+            },
+            "src": "1938:190:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Removes (deregisters) a relay. Unregistered (but staked for) relays can also be removed.\n     * Can only be called by the owner of the relay. After the relay's `unstakeDelay` has elapsed, {unstake} will be\ncallable.\n     * Emits a {RelayRemoved} event.",
+            "id": 708,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "removeRelayByOwner",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 706,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 705,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 708,
+                  "src": "2464:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 704,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2464:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "2463:15:2"
+            },
+            "returnParameters": {
+              "id": 707,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "2485:0:2"
+            },
+            "scope": 918,
+            "src": "2436:50:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when a relay is removed (deregistered). `unstakeTime` is the time when unstake will be callable.",
+            "id": 714,
+            "name": "RelayRemoved",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 713,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 710,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 714,
+                  "src": "2644:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 709,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2644:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 712,
+                  "indexed": false,
+                  "name": "unstakeTime",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 714,
+                  "src": "2667:19:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 711,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2667:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "2643:44:2"
+            },
+            "src": "2625:63:2"
+          },
+          {
+            "body": null,
+            "documentation": "Deletes the relay from the system, and gives back its stake to the owner.\n     * Can only be called by the relay owner, after `unstakeDelay` has elapsed since {removeRelayByOwner} was called.\n     * Emits an {Unstaked} event.",
+            "id": 719,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "unstake",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 717,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 716,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 719,
+                  "src": "2967:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 715,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "2967:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "2966:15:2"
+            },
+            "returnParameters": {
+              "id": 718,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "2988:0:2"
+            },
+            "scope": 918,
+            "src": "2950:39:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when a relay is unstaked for, including the returned stake.",
+            "id": 725,
+            "name": "Unstaked",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 724,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 721,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 725,
+                  "src": "3106:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 720,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3106:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 723,
+                  "indexed": false,
+                  "name": "stake",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 725,
+                  "src": "3129:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 722,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3129:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "3105:38:2"
+            },
+            "src": "3091:53:2"
+          },
+          {
+            "canonicalName": "IRelayHub.RelayState",
+            "id": 730,
+            "members": [
+              {
+                "id": 726,
+                "name": "Unknown",
+                "nodeType": "EnumValue",
+                "src": "3208:7:2"
+              },
+              {
+                "id": 727,
+                "name": "Staked",
+                "nodeType": "EnumValue",
+                "src": "3293:6:2"
+              },
+              {
+                "id": 728,
+                "name": "Registered",
+                "nodeType": "EnumValue",
+                "src": "3368:10:2"
+              },
+              {
+                "id": 729,
+                "name": "Removed",
+                "nodeType": "EnumValue",
+                "src": "3456:7:2"
+              }
+            ],
+            "name": "RelayState",
+            "nodeType": "EnumDefinition",
+            "src": "3182:427:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Returns a relay's status. Note that relays can be deleted when unstaked or penalized, causing this function\nto return an empty entry.",
+            "id": 745,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "getRelay",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 733,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 732,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 745,
+                  "src": "3802:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 731,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3802:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "3801:15:2"
+            },
+            "returnParameters": {
+              "id": 744,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 735,
+                  "name": "totalStake",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 745,
+                  "src": "3877:18:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 734,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3877:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 737,
+                  "name": "unstakeDelay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 745,
+                  "src": "3909:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 736,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3909:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 739,
+                  "name": "unstakeTime",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 745,
+                  "src": "3943:19:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 738,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3943:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 741,
+                  "name": "owner",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 745,
+                  "src": "3976:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address_payable",
+                    "typeString": "address payable"
+                  },
+                  "typeName": {
+                    "id": 740,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "3976:15:2",
+                    "stateMutability": "payable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address_payable",
+                      "typeString": "address payable"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 743,
+                  "name": "state",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 745,
+                  "src": "4011:16:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_enum$_RelayState_$730",
+                    "typeString": "enum IRelayHub.RelayState"
+                  },
+                  "typeName": {
+                    "contractScope": null,
+                    "id": 742,
+                    "name": "RelayState",
+                    "nodeType": "UserDefinedTypeName",
+                    "referencedDeclaration": 730,
+                    "src": "4011:10:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_enum$_RelayState_$730",
+                      "typeString": "enum IRelayHub.RelayState"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "3863:174:2"
+            },
+            "scope": 918,
+            "src": "3784:254:2",
+            "stateMutability": "view",
+            "superFunction": null,
+            "visibility": "external"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Deposits Ether for a contract, so that it can receive (and pay for) relayed transactions.\n     * Unused balance can only be withdrawn by the contract itself, by calling {withdraw}.\n     * Emits a {Deposited} event.",
+            "id": 750,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "depositFor",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 748,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 747,
+                  "name": "target",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 750,
+                  "src": "4348:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 746,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4348:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "4347:16:2"
+            },
+            "returnParameters": {
+              "id": 749,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "4378:0:2"
+            },
+            "scope": 918,
+            "src": "4328:51:2",
+            "stateMutability": "payable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when {depositFor} is called, including the amount and account that was funded.",
+            "id": 758,
+            "name": "Deposited",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 757,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 752,
+                  "indexed": true,
+                  "name": "recipient",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 758,
+                  "src": "4525:25:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 751,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4525:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 754,
+                  "indexed": true,
+                  "name": "from",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 758,
+                  "src": "4560:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 753,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4560:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 756,
+                  "indexed": false,
+                  "name": "amount",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 758,
+                  "src": "4590:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 755,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4590:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "4515:95:2"
+            },
+            "src": "4500:111:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Returns an account's deposits. These can be either a contracts's funds, or a relay owner's revenue.",
+            "id": 765,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "balanceOf",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 761,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 760,
+                  "name": "target",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 765,
+                  "src": "4764:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 759,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4764:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "4763:16:2"
+            },
+            "returnParameters": {
+              "id": 764,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 763,
+                  "name": "",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 765,
+                  "src": "4803:7:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 762,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "4803:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "4802:9:2"
+            },
+            "scope": 918,
+            "src": "4745:67:2",
+            "stateMutability": "view",
+            "superFunction": null,
+            "visibility": "external"
+          },
+          {
+            "body": null,
+            "documentation": "Withdraws from an account's balance, sending it back to it. Relay owners call this to retrieve their revenue, and\ncontracts can use it to reduce their funding.\n     * Emits a {Withdrawn} event.",
+            "id": 772,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "withdraw",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 770,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 767,
+                  "name": "amount",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 772,
+                  "src": "5067:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 766,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5067:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 769,
+                  "name": "dest",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 772,
+                  "src": "5083:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address_payable",
+                    "typeString": "address payable"
+                  },
+                  "typeName": {
+                    "id": 768,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5083:15:2",
+                    "stateMutability": "payable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address_payable",
+                      "typeString": "address payable"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "5066:38:2"
+            },
+            "returnParameters": {
+              "id": 771,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "5111:0:2"
+            },
+            "scope": 918,
+            "src": "5049:63:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when an account withdraws funds from `RelayHub`.",
+            "id": 780,
+            "name": "Withdrawn",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 779,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 774,
+                  "indexed": true,
+                  "name": "account",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 780,
+                  "src": "5228:23:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 773,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5228:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 776,
+                  "indexed": true,
+                  "name": "dest",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 780,
+                  "src": "5261:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 775,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5261:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 778,
+                  "indexed": false,
+                  "name": "amount",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 780,
+                  "src": "5291:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 777,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5291:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "5218:93:2"
+            },
+            "src": "5203:109:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Checks if the `RelayHub` will accept a relayed operation.\nMultiple things must be true for this to happen:\n - all arguments must be signed for by the sender (`from`)\n - the sender's nonce must be the current one\n - the recipient must accept this transaction (via {acceptRelayedCall})\n     * Returns a `PreconditionCheck` value (`OK` when the transaction can be relayed), or a recipient-specific error\ncode if it returns one in {acceptRelayedCall}.",
+            "id": 807,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "canRelay",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 801,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 782,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "5880:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 781,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5880:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 784,
+                  "name": "from",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "5903:12:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 783,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5903:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 786,
+                  "name": "to",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "5925:10:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 785,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5925:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 788,
+                  "name": "encodedFunction",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "5945:28:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 787,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5945:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 790,
+                  "name": "transactionFee",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "5983:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 789,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "5983:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 792,
+                  "name": "gasPrice",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6015:16:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 791,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6015:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 794,
+                  "name": "gasLimit",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6041:16:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 793,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6041:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 796,
+                  "name": "nonce",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6067:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 795,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6067:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 798,
+                  "name": "signature",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6090:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 797,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6090:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 800,
+                  "name": "approvalData",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6122:25:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 799,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6122:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "5870:283:2"
+            },
+            "returnParameters": {
+              "id": 806,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 803,
+                  "name": "status",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6175:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 802,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6175:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 805,
+                  "name": "recipientContext",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 807,
+                  "src": "6191:29:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 804,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "6191:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "6174:47:2"
+            },
+            "scope": 918,
+            "src": "5853:369:2",
+            "stateMutability": "view",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "canonicalName": "IRelayHub.PreconditionCheck",
+            "id": 813,
+            "members": [
+              {
+                "id": 808,
+                "name": "OK",
+                "nodeType": "EnumValue",
+                "src": "6366:2:2"
+              },
+              {
+                "id": 809,
+                "name": "WrongSignature",
+                "nodeType": "EnumValue",
+                "src": "6424:14:2"
+              },
+              {
+                "id": 810,
+                "name": "WrongNonce",
+                "nodeType": "EnumValue",
+                "src": "6510:10:2"
+              },
+              {
+                "id": 811,
+                "name": "AcceptRelayedCallReverted",
+                "nodeType": "EnumValue",
+                "src": "6588:25:2"
+              },
+              {
+                "id": 812,
+                "name": "InvalidRecipientStatusCode",
+                "nodeType": "EnumValue",
+                "src": "6681:26:2"
+              }
+            ],
+            "name": "PreconditionCheck",
+            "nodeType": "EnumDefinition",
+            "src": "6333:440:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Relays a transaction.\n     * For this to succeed, multiple conditions must be met:\n - {canRelay} must `return PreconditionCheck.OK`\n - the sender must be a registered relay\n - the transaction's gas price must be larger or equal to the one that was requested by the sender\n - the transaction must have enough gas to not run out of gas if all internal transactions (calls to the\nrecipient) use all gas available to them\n - the recipient must have enough balance to pay the relay for the worst-case scenario (i.e. when all gas is\nspent)\n     * If all conditions are met, the call will be relayed and the recipient charged. {preRelayedCall}, the encoded\nfunction and {postRelayedCall} will be called in that order.\n     * Parameters:\n - `from`: the client originating the request\n - `to`: the target {IRelayRecipient} contract\n - `encodedFunction`: the function call to relay, including data\n - `transactionFee`: fee (%) the relay takes over actual gas cost\n - `gasPrice`: gas price the client is willing to pay\n - `gasLimit`: gas to forward when calling the encoded function\n - `nonce`: client's nonce\n - `signature`: client's signature over all previous params, plus the relay and RelayHub addresses\n - `approvalData`: dapp-specific data forwared to {acceptRelayedCall}. This value is *not* verified by the\n`RelayHub`, but it still can be used for e.g. a signature.\n     * Emits a {TransactionRelayed} event.",
+            "id": 834,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "relayCall",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 832,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 815,
+                  "name": "from",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8396:12:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 814,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8396:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 817,
+                  "name": "to",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8418:10:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 816,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8418:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 819,
+                  "name": "encodedFunction",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8438:28:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 818,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8438:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 821,
+                  "name": "transactionFee",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8476:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 820,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8476:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 823,
+                  "name": "gasPrice",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8508:16:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 822,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8508:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 825,
+                  "name": "gasLimit",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8534:16:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 824,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8534:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 827,
+                  "name": "nonce",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8560:13:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 826,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8560:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 829,
+                  "name": "signature",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8583:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 828,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8583:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 831,
+                  "name": "approvalData",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 834,
+                  "src": "8615:25:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 830,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "8615:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "8386:260:2"
+            },
+            "returnParameters": {
+              "id": 833,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "8653:0:2"
+            },
+            "scope": 918,
+            "src": "8368:286:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when an attempt to relay a call failed.\n     * This can happen due to incorrect {relayCall} arguments, or the recipient not accepting the relayed call. The\nactual relayed call was not executed, and the recipient not charged.\n     * The `reason` parameter contains an error code: values 1-10 correspond to `PreconditionCheck` entries, and values\nover 10 are custom recipient error codes returned from {acceptRelayedCall}.",
+            "id": 846,
+            "name": "CanRelayFailed",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 845,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 836,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 846,
+                  "src": "9175:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 835,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9175:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 838,
+                  "indexed": true,
+                  "name": "from",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 846,
+                  "src": "9206:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 837,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9206:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 840,
+                  "indexed": true,
+                  "name": "to",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 846,
+                  "src": "9236:18:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 839,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9236:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 842,
+                  "indexed": false,
+                  "name": "selector",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 846,
+                  "src": "9264:15:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes4",
+                    "typeString": "bytes4"
+                  },
+                  "typeName": {
+                    "id": 841,
+                    "name": "bytes4",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9264:6:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes4",
+                      "typeString": "bytes4"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 844,
+                  "indexed": false,
+                  "name": "reason",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 846,
+                  "src": "9289:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 843,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9289:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "9165:144:2"
+            },
+            "src": "9145:165:2"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when a transaction is relayed.\nUseful when monitoring a relay's operation and relayed calls to a contract\n     * Note that the actual encoded function might be reverted: this is indicated in the `status` parameter.\n     * `charge` is the Ether value deducted from the recipient's balance, paid to the relay's owner.",
+            "id": 860,
+            "name": "TransactionRelayed",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 859,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 848,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 860,
+                  "src": "9723:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 847,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9723:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 850,
+                  "indexed": true,
+                  "name": "from",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 860,
+                  "src": "9754:20:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 849,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9754:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 852,
+                  "indexed": true,
+                  "name": "to",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 860,
+                  "src": "9784:18:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 851,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9784:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 854,
+                  "indexed": false,
+                  "name": "selector",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 860,
+                  "src": "9812:15:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes4",
+                    "typeString": "bytes4"
+                  },
+                  "typeName": {
+                    "id": 853,
+                    "name": "bytes4",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9812:6:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes4",
+                      "typeString": "bytes4"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 856,
+                  "indexed": false,
+                  "name": "status",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 860,
+                  "src": "9837:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_enum$_RelayCallStatus_$866",
+                    "typeString": "enum IRelayHub.RelayCallStatus"
+                  },
+                  "typeName": {
+                    "contractScope": null,
+                    "id": 855,
+                    "name": "RelayCallStatus",
+                    "nodeType": "UserDefinedTypeName",
+                    "referencedDeclaration": 866,
+                    "src": "9837:15:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_enum$_RelayCallStatus_$866",
+                      "typeString": "enum IRelayHub.RelayCallStatus"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 858,
+                  "indexed": false,
+                  "name": "charge",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 860,
+                  "src": "9869:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 857,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "9869:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "9713:176:2"
+            },
+            "src": "9689:201:2"
+          },
+          {
+            "canonicalName": "IRelayHub.RelayCallStatus",
+            "id": 866,
+            "members": [
+              {
+                "id": 861,
+                "name": "OK",
+                "nodeType": "EnumValue",
+                "src": "9986:2:2"
+              },
+              {
+                "id": 862,
+                "name": "RelayedCallFailed",
+                "nodeType": "EnumValue",
+                "src": "10097:17:2"
+              },
+              {
+                "id": 863,
+                "name": "PreRelayedFailed",
+                "nodeType": "EnumValue",
+                "src": "10184:16:2"
+              },
+              {
+                "id": 864,
+                "name": "PostRelayedFailed",
+                "nodeType": "EnumValue",
+                "src": "10277:17:2"
+              },
+              {
+                "id": 865,
+                "name": "RecipientBalanceChanged",
+                "nodeType": "EnumValue",
+                "src": "10381:23:2"
+              }
+            ],
+            "name": "RelayCallStatus",
+            "nodeType": "EnumDefinition",
+            "src": "9955:539:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Returns how much gas should be forwarded to a call to {relayCall}, in order to relay a transaction that will\nspend up to `relayedCallStipend` gas.",
+            "id": 873,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "requiredGas",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 869,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 868,
+                  "name": "relayedCallStipend",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 873,
+                  "src": "10703:26:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 867,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "10703:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "10702:28:2"
+            },
+            "returnParameters": {
+              "id": 872,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 871,
+                  "name": "",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 873,
+                  "src": "10776:7:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 870,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "10776:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "10775:9:2"
+            },
+            "scope": 918,
+            "src": "10682:103:2",
+            "stateMutability": "view",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Returns the maximum recipient charge, given the amount of gas forwarded, gas price and relay fee.",
+            "id": 884,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "maxPossibleCharge",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 880,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 875,
+                  "name": "relayedCallStipend",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 884,
+                  "src": "10953:26:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 874,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "10953:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 877,
+                  "name": "gasPrice",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 884,
+                  "src": "10989:16:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 876,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "10989:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 879,
+                  "name": "transactionFee",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 884,
+                  "src": "11015:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 878,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "11015:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "10943:100:2"
+            },
+            "returnParameters": {
+              "id": 883,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 882,
+                  "name": "",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 884,
+                  "src": "11065:7:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 881,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "11065:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "11064:9:2"
+            },
+            "scope": 918,
+            "src": "10917:157:2",
+            "stateMutability": "view",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Penalize a relay that signed two transactions using the same nonce (making only the first one valid) and\ndifferent data (gas price, gas limit, etc. may be different).\n     * The (unsigned) transaction data and signature for both transactions must be provided.",
+            "id": 895,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "penalizeRepeatedNonce",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 893,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 886,
+                  "name": "unsignedTx1",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 895,
+                  "src": "11710:24:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 885,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "11710:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 888,
+                  "name": "signature1",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 895,
+                  "src": "11744:23:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 887,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "11744:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 890,
+                  "name": "unsignedTx2",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 895,
+                  "src": "11777:24:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 889,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "11777:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 892,
+                  "name": "signature2",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 895,
+                  "src": "11811:23:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 891,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "11811:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "11700:140:2"
+            },
+            "returnParameters": {
+              "id": 894,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "11847:0:2"
+            },
+            "scope": 918,
+            "src": "11670:178:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Penalize a relay that sent a transaction that didn't target `RelayHub`'s {registerRelay} or {relayCall}.",
+            "id": 902,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "penalizeIllegalTransaction",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 900,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 897,
+                  "name": "unsignedTx",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 902,
+                  "src": "12032:23:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 896,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12032:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 899,
+                  "name": "signature",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 902,
+                  "src": "12065:22:2",
+                  "stateVariable": false,
+                  "storageLocation": "memory",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_bytes_memory_ptr",
+                    "typeString": "bytes"
+                  },
+                  "typeName": {
+                    "id": 898,
+                    "name": "bytes",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12065:5:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_bytes_storage_ptr",
+                      "typeString": "bytes"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "12022:71:2"
+            },
+            "returnParameters": {
+              "id": 901,
+              "nodeType": "ParameterList",
+              "parameters": [],
+              "src": "12100:0:2"
+            },
+            "scope": 918,
+            "src": "11987:114:2",
+            "stateMutability": "nonpayable",
+            "superFunction": null,
+            "visibility": "public"
+          },
+          {
+            "anonymous": false,
+            "documentation": "@dev Emitted when a relay is penalized.",
+            "id": 910,
+            "name": "Penalized",
+            "nodeType": "EventDefinition",
+            "parameters": {
+              "id": 909,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 904,
+                  "indexed": true,
+                  "name": "relay",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 910,
+                  "src": "12186:21:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 903,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12186:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 906,
+                  "indexed": false,
+                  "name": "sender",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 910,
+                  "src": "12209:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 905,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12209:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                },
+                {
+                  "constant": false,
+                  "id": 908,
+                  "indexed": false,
+                  "name": "amount",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 910,
+                  "src": "12225:14:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 907,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12225:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "12185:55:2"
+            },
+            "src": "12170:71:2"
+          },
+          {
+            "body": null,
+            "documentation": "@dev Returns an account's nonce in `RelayHub`.",
+            "id": 917,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "getNonce",
+            "nodeType": "FunctionDefinition",
+            "parameters": {
+              "id": 913,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 912,
+                  "name": "from",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 917,
+                  "src": "12335:12:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_address",
+                    "typeString": "address"
+                  },
+                  "typeName": {
+                    "id": 911,
+                    "name": "address",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12335:7:2",
+                    "stateMutability": "nonpayable",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_address",
+                      "typeString": "address"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "12334:14:2"
+            },
+            "returnParameters": {
+              "id": 916,
+              "nodeType": "ParameterList",
+              "parameters": [
+                {
+                  "constant": false,
+                  "id": 915,
+                  "name": "",
+                  "nodeType": "VariableDeclaration",
+                  "scope": 917,
+                  "src": "12372:7:2",
+                  "stateVariable": false,
+                  "storageLocation": "default",
+                  "typeDescriptions": {
+                    "typeIdentifier": "t_uint256",
+                    "typeString": "uint256"
+                  },
+                  "typeName": {
+                    "id": 914,
+                    "name": "uint256",
+                    "nodeType": "ElementaryTypeName",
+                    "src": "12372:7:2",
+                    "typeDescriptions": {
+                      "typeIdentifier": "t_uint256",
+                      "typeString": "uint256"
+                    }
+                  },
+                  "value": null,
+                  "visibility": "internal"
+                }
+              ],
+              "src": "12371:9:2"
+            },
+            "scope": 918,
+            "src": "12317:64:2",
+            "stateMutability": "view",
+            "superFunction": null,
+            "visibility": "external"
+          }
+        ],
+        "scope": 919,
+        "src": "434:11949:2"
+      }
+    ],
+    "src": "79:12304:2"
+  },
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "compiler": {
+    "name": "solc",
+    "version": "0.5.17+commit.d19bba13.Emscripten.clang",
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "evmVersion": "petersburg"
+  }
+}
