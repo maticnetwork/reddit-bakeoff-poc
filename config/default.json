@@ -10,11 +10,11 @@
       "subscriptionPrice": "10",
       "duration": "604800",
       "renewBefore": "518400",
-      "subredditName": "Matic", 
+      "subredditName": "Matic",
       "subredditTokenSymbol": "RM",
       "subredditTokenName": "RMatic"
     }
-  }, 
+  },
   "mumbai": {
     "deployed": true,
     "network": {
@@ -22,7 +22,7 @@
       "netId": "80001"
     },
     "parent": {
-      "rpc": ""
+      "rpc": "https://goerli.infura.io/v3/<GOERLI-API-KEY>"
     },
     "params": {
       "initialSupply": "10000",
@@ -30,7 +30,7 @@
       "subscriptionPrice": "10",
       "duration": "604800",
       "renewBefore": "518400",
-      "subredditName": "mREDDIT", 
+      "subredditName": "mREDDIT",
       "subredditTokenSymbol": "MR",
       "subredditTokenName": "mREDDIT"
     }
