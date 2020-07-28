@@ -2139,7 +2139,7 @@ contract PredicateUtils is ExitsDataStructure, ChainIdMixin {
         txHash = keccak256(RLPEncode.encodeList(rawTx));
         signer = ecrecover(
             txHash,
-            Common.getV(txList[6].toBytes(), networkId),
+            Common.getV(txList[6].toBytes(), CHAINID),
             bytes32(txList[7].toUint()),
             bytes32(txList[8].toUint())
         );
