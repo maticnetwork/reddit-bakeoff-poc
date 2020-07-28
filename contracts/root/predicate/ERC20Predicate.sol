@@ -287,7 +287,7 @@ library BytesLib {
 pragma solidity ^0.5.2;
 
 library Common {
-    function getV(bytes memory v, uint16 chainId) public pure returns (uint8) {
+    function getV(bytes memory v, uint256 chainId) public pure returns (uint8) {
         if (chainId > 0) {
             return
                 uint8(
@@ -2139,7 +2139,7 @@ contract PredicateUtils is ExitsDataStructure, ChainIdMixin {
         txHash = keccak256(RLPEncode.encodeList(rawTx));
         signer = ecrecover(
             txHash,
-            Common.getV(txList[6].toBytes(), Common.toUint16(networkId)),
+            Common.getV(txList[6].toBytes(), networkId),
             bytes32(txList[7].toUint()),
             bytes32(txList[8].toUint())
         );
