@@ -52,14 +52,10 @@ contract UpdatableGSNRecipientSignature is Initializable, GSNRecipient {
         ) {
             return _approveRelayedCall();
         } else {
-
-            // @todo: should return error here: but need to figure out the calldata and signature generation - was facing some error - not sure why. Keeping it a dumb sig check for now :grimacing:
-            return _approveRelayedCall();
-
-            // return
-            //     _rejectRelayedCall(
-            //         uint256(GSNRecipientSignatureErrorCodes.INVALID_SIGNER)
-            //     );
+            return
+                _rejectRelayedCall(
+                    uint256(GSNRecipientSignatureErrorCodes.INVALID_SIGNER)
+                );
         }
     }
 
