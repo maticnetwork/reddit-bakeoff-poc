@@ -30,7 +30,7 @@ $ export NETWORK=dev && node scripts/<test-file>
 |Contract|Address (Görli)|
 |---|---|
 |SubredditPoints|[`0x0e7e9e6Cc56F356e412F6b7CA63Da0a883243fC0`](https://goerli.etherscan.io/address/0x0e7e9e6Cc56F356e412F6b7CA63Da0a883243fC0)|
-|MintableERC20Predicate|[`0x4F4fAC50E94f596015aaD3b15a5fA5b2255d4266`](https://goerli.etherscan.io/address/0x4F4fAC50E94f596015aaD3b15a5fA5b2255d4266)|
+|MintableERC20Predicate|[`0x54C39834035d32Fe785557E2c26016F1fFb4C3d4`](https://goerli.etherscan.io/address/0x54C39834035d32Fe785557E2c26016F1fFb4C3d4)|
 |WithdrawManager (Proxy)|[`0x2923C8dD6Cdf6b2507ef91de74F1d5E0F11Eac53`](https://goerli.etherscan.io/address/0x2923C8dD6Cdf6b2507ef91de74F1d5E0F11Eac53)|
 |FastExit|[`0x8a7490Fc46885e0795051Af9a28A3852A988E34f`](https://goerli.etherscan.io/address/0x8a7490Fc46885e0795051Af9a28A3852A988E34f)|
 |ExitNFT|[`0xE2Ab047326B38e4DDb6791551e8d593D30E02724`](https://goerli.etherscan.io/address/0xE2Ab047326B38e4DDb6791551e8d593D30E02724)|
