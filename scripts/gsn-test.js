@@ -1,8 +1,9 @@
 
-const { 
-  web3,  // accounts
+const {
+  web3, 
   token, subscriptions, distributions, // initialised contracts
-} = require('./helpers/utils')
+  wallet
+} = require('./utils')
 
 let currentRound = 0
 let user1Karma = 10000
@@ -13,32 +14,34 @@ let user1
 let user2
 
 async function setAccounts () {
-  owner = await web3.eth.personal.newAccount(web3.utils.randomHex(32));
-  user1 = await web3.eth.personal.newAccount(web3.utils.randomHex(32));
-  user2 = await web3.eth.personal.newAccount(web3.utils.randomHex(32));
+  owner = await web3.eth.personal.newAccount();
+  user1 = await web3.eth.personal.newAccount();
+  user2 = await web3.eth.personal.newAccount();
+  
   console.log (' 🔀 Random accounts generated')
   console.log (
     ' owner:',
     owner,
-    '\n user1',
+    '\n user1:',
     user1,
-    '\n user2',
+    '\n user2:',
     user2 
   )
-  console.log (' ⛽️ ETH balances')
+  console.log ('\n ⛽️ ETH balances')
   let owner_ = await web3.eth.getBalance(owner)
-  let user1_ = await web3.eth.getBalance(owner)
-  let user2_ = await web3.eth.getBalance(owner)
+  let user1_ = await web3.eth.getBalance(user1)
+  let user2_ = await web3.eth.getBalance(user2)
   console.log (
     ' owner:', owner_,
-    '\n user1: ', user1_,
-    '\n user2: ', user2_
+    '\n user1:', user1_,
+    '\n user2:', user2_
   )
 }
 
 async function claim () {
   // send claim from owner
-  console.log ('\n🚀 sending transaction from owner to mint tokens for user1')
+  console.log ('\n 🚀 sending transaction from owner to mint tokens for user1')
+  
   await distributions.methods.claim (
     currentRound, user1, user1Karma
   ).send({ from: owner }).then((r) => {

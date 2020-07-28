@@ -16,7 +16,7 @@ const gsnProvider = new GSNProvider(network.mumbai, { approveFunction })
 const web3 = new Web3 (gsnProvider)
 const wallet = web3.eth.accounts.wallet
 const accounts = web3.eth.accounts
-wallet.add (accounts.privateKeyToAccount(privateKeys.owner))
+wallet.add (privateKeys.owner)
 
 const tokenArtifacts = require('../build/contracts/SubredditPoints_v0.json')
 const distributionsArtifacts = require('../build/contracts/Distributions_v0.json')
@@ -39,6 +39,7 @@ module.exports = {
   owner: wallet[0],
   gsnApprover: wallet[0], // keeping gsnapprover same as owner for testing
   token: token,
+  wallet,
   subscriptions: subscriptions,
   distributions: distributions,
   params: params,

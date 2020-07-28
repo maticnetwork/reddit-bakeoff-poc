@@ -23,6 +23,7 @@
     "@truffle/hdwallet-provider": "^1.0.40",
     "config": "^3.3.1",
     "ethereumjs-util": "^7.0.3",
-    "matic": "github:rahuldamodar94/matic.js#620ebe521b8ed5650c39b5a4e43a373578ab1cad"
+    "matic": "github:rahuldamodar94/matic.js#620ebe521b8ed5650c39b5a4e43a373578ab1cad",
+    "truffle-hdwallet-provider": "^1.0.17"
   }
 }
