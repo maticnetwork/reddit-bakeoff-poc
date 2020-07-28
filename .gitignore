@@ -3,3 +3,5 @@ secrets.json
 .openzeppelin/
 .DS_Store
 info.json
+
+.openzeppelin/.session

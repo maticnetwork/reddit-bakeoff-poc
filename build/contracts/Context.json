@@ -127,7 +127,7 @@
                       "name": "msg",
                       "nodeType": "Identifier",
                       "overloadedDeclarations": [],
-                      "referencedDeclaration": 8878,
+                      "referencedDeclaration": 9127,
                       "src": "992:3:4",
                       "typeDescriptions": {
                         "typeIdentifier": "t_magic_message",
@@ -221,7 +221,7 @@
                     "name": "this",
                     "nodeType": "Identifier",
                     "overloadedDeclarations": [],
-                    "referencedDeclaration": 8894,
+                    "referencedDeclaration": 9143,
                     "src": "1082:4:4",
                     "typeDescriptions": {
                       "typeIdentifier": "t_contract$_Context_$1702",
@@ -241,7 +241,7 @@
                       "name": "msg",
                       "nodeType": "Identifier",
                       "overloadedDeclarations": [],
-                      "referencedDeclaration": 8878,
+                      "referencedDeclaration": 9127,
                       "src": "1222:3:4",
                       "typeDescriptions": {
                         "typeIdentifier": "t_magic_message",
