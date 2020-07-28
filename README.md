@@ -6,28 +6,7 @@
 |Matic's Mumbai Test network|https://mumbai-explorer.matic.today/|`https://rpc-mumbai.matic.today`|
 |Görli Test network|https://goerli.etherscan.io/|`https://goerli.infura.io/v3/<api-key>`|
 
-### Setup
-
-Install dependencies
-```bash
-$ npm i
-```
-
-1. Create secrets.json in the root directory according to the format given in secrets.json.template </br>
-2. Insert the privatekey of the reddit contracts in the owner key of secrets.json
-3. In the config/default.json mention the goerli rpc endpoint 
-
-for Mumbai test network
-```bash
-$ export NETWORK=mumbai && node scripts/<test-file>
-```
-
-for local Ganache testing
-```bash
-$ export NETWORK=dev && node scripts/<test-file>
-```
-
-## Contract Addresses
+### Contract Addresses
 (all addresses can be found in `/scripts/helpers/mumbai.json`)
 ### Network: Mumbai 
 |Contract|Address (Mumbai)|
@@ -83,6 +62,29 @@ The contracts require signatures from certain accounts throughout the flow (requ
 |karmaSource|`0xFd71Dc9721d9ddCF0480A582927c3dCd42f3064C`|
 |contracts owner|`0xFd71Dc9721d9ddCF0480A582927c3dCd42f3064C`|
 |liquidity provider|`0xFd71Dc9721d9ddCF0480A582927c3dCd42f3064C`|
+
+
+### Setup
+
+Install dependencies
+```bash
+$ npm i
+```
+
+1. Create secrets.json in the root directory according to the format given in secrets.json.template </br>
+2. Insert the privatekey of the reddit contracts in the owner key of secrets.json
+3. In the `config/default.json` mention the goerli rpc endpoint 
+
+for Mumbai test network
+```bash
+$ export NETWORK=mumbai && node scripts/<test-file>
+```
+
+for local Ganache testing
+```bash
+$ export NETWORK=dev && node scripts/<test-file>
+```
+
 
 1. `test1.js`: Test mint, transfer, subscribe
    
