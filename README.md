@@ -71,6 +71,8 @@ The contracts require signatures from certain accounts throughout the flow (requ
 
 ### Setup
 
+*Refer [this](https://github.com/maticnetwork/reddit-bakeoff-poc/wiki/Local-Setup) page for detailed description of each step.*
+
 Install dependencies
 
 ```bash
